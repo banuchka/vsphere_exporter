@@ -168,6 +168,40 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			}
 		}
 	}
+        vms, err := e.finder.VirtualMachineList(e.ctx, "*")
+        if err != nil {
+                log.Fatal(err)
+        }
+
+	for _, vm := range vms {
+                vmName := vm.Name()
+                querySpec := types.PerfQuerySpec{
+                        Entity:     vm.Reference(),
+                        MaxSample:  1,
+                        IntervalId: 20,
+                }
+                query := types.QueryPerf{
+                        This:      *e.client.ServiceContent.PerfManager,
+                        QuerySpec: []types.PerfQuerySpec{querySpec},
+                }
+
+                response, err := methods.QueryPerf(e.ctx, e.client, &query)
+                if err != nil {
+                        log.Fatal(err)
+                }
+
+                for _, base := range response.Returnval {
+                        metric := base.(*types.PerfEntityMetric)
+                        for _, baseSeries := range metric.Value {
+                                series := baseSeries.(*types.PerfMetricIntSeries)
+                                desc := countersInfoMap[int(series.Id.CounterId)]
+                                if desc != nil {
+                                        ch <- prometheus.MustNewConstMetric(desc,
+                                                prometheus.GaugeValue, float64(series.Value[0]), vmName, series.Id.Instance, metric.Entity.Type)
+                                }
+                        }
+                }
+        }
 }
 
 func main() {
