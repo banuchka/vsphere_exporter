@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"reflect"
 
 	"gopkg.in/yaml.v2"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/serenize/snaker"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vim25/methods"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
@@ -109,6 +111,28 @@ func NewExporter(config *Config) *Exporter {
 	}
 
 	finder.SetDatacenter(datacenter)
+	vms, err := finder.VirtualMachineList(ctx, "*")
+	if err != nil {
+		log.Fatal(err)
+	}
+	pc := property.DefaultCollector(client.Client)
+
+	var refs []types.ManagedObjectReference
+	for _, vm := range vms {
+		refs = append(refs, vm.Reference())
+	}
+	var vmt []mo.VirtualMachine
+	err = pc.Retrieve(ctx, refs, []string{"summary"}, &vmt)
+
+	if err != nil {
+                log.Fatal(err)
+	}
+	fmt.Println("Virtual machines found:", len(vmt))
+	/*
+	for _, vm := range vmt {
+		fmt.Println("%s\n", vm.Summary)
+	}	
+	*/
 
 	return &Exporter{
 		ctx:                ctx,
@@ -141,6 +165,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	for _, host := range hosts {
 		hostName := host.Name()
+		log.Info(reflect.TypeOf(host))
 		querySpec := types.PerfQuerySpec{
 			Entity:     host.Reference(),
 			MaxSample:  1,
@@ -172,9 +197,16 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
         if err != nil {
                 log.Fatal(err)
         }
+	pc := property.DefaultCollector(e.client.Client)
+	var refs []types.ManagedObjectReference
+	for _, vm := range vms {
+		//refs = append(refs, vm.Reference())
+		log.Info(vm)
+	}
 
 	for _, vm := range vms {
                 vmName := vm.Name()
+
                 querySpec := types.PerfQuerySpec{
                         Entity:     vm.Reference(),
                         MaxSample:  1,
